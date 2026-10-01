@@ -1,0 +1,177 @@
+{% extends "base-dashboard.html" %}
+
+{% block title %}Спецификации{% endblock %}
+{% block content %}
+<script>
+    let itemsList = [];
+
+    async function loadItems() {
+        try {
+            const res = await fetch('/api/items/', { credentials: 'include' });
+            const data = await res.json();
+            itemsList = data.items || [];
+
+            const productSelect = document.getElementById('specProductId');
+            const materialSelect = document.getElementById('specMaterialId');
+            const operationSelect = document.getElementById('specOperationId');
+
+            if (productSelect) {
+                productSelect.innerHTML = '<option value="">Выберите продукцию...</option>' +
+                    itemsList.filter(i => i.item_type === 'Продукция')
+                        .map(i => `<option value="${i.item_id}">${i.name} (${i.code})</option>`).join('');
+            }
+            if (materialSelect) {
+                materialSelect.innerHTML = '<option value="">Выберите материал...</option>' +
+                    itemsList.filter(i => i.item_type === 'Материалы')
+                        .map(i => `<option value="${i.item_id}">${i.name} (${i.code})</option>`).join('');
+            }
+            if (operationSelect) {
+                operationSelect.innerHTML = '<option value="">Выберите операцию...</option>' +
+                    itemsList.filter(i => i.item_type === 'Операция')
+                        .map(i => `<option value="${i.item_id}">${i.name} (${i.code})</option>`).join('');
+            }
+        } catch (e) { itemsList = []; }
+    }
+
+    async function loadSpecifications() {
+        try {
+            const response = await fetch('/api/specification/', { credentials: 'include' });
+            const data = await response.json();
+            const tbody = document.getElementById('specTableBody');
+            const list = data.specifications || [];
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Спецификаций пока нет</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            list.forEach(s => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${s.specification_id}</td>
+                    <td>${s.name}</td>
+                    <td>${s.item_id}</td>
+                    <td>${s.material_id || '—'}</td>
+                    <td>${s.quantity}</td>
+                    <td>${s.operation_time}</td>
+                    <td>—</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            showNotification('error', 'Ошибка', 'Не удалось загрузить спецификации');
+        }
+    }
+
+    function openAddSpecModal() {
+        document.getElementById('specForm').reset();
+        document.getElementById('specModalTitle').textContent = 'Добавить спецификацию';
+        openModal('specModal');
+    }
+
+    async function saveSpec(event) {
+        event.preventDefault();
+        const data = {
+            name: document.getElementById('specName').value,
+            item_id: parseInt(document.getElementById('specProductId').value),
+            material_id: document.getElementById('specMaterialId').value
+                ? parseInt(document.getElementById('specMaterialId').value) : null,
+            quantity: parseFloat(document.getElementById('specQuantity').value) || 0,
+            operation_time: parseFloat(document.getElementById('specOperationTime').value) || 0,
+        };
+
+        if (!data.item_id) {
+            showNotification('error', 'Ошибка', 'Выберите продукцию');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/specification/', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || 'Ошибка');
+            showNotification('success', 'Успех', result.message || 'Создано');
+            closeModal('specModal');
+            loadSpecifications();
+        } catch (error) {
+            showNotification('error', 'Ошибка', error.message);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSpecifications();
+        loadItems();
+    });
+</script>
+
+<div class="data-table">
+    <div class="table-header">
+        <div class="table-title">Спецификации</div>
+        <div class="table-actions">
+            <button class="btn btn-primary" onclick="openAddSpecModal()">+ Добавить спецификацию</button>
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Продукция</th>
+                <th>Материал/Операция</th>
+                <th>Кол-во</th>
+                <th>Время</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody id="specTableBody">
+            <tr><td colspan="7" class="loading-spinner">Загрузка...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div id="specModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="specModalTitle" class="modal-title">Добавить спецификацию</h3>
+            <button class="modal-close" onclick="closeModal('specModal')">&times;</button>
+        </div>
+        <form id="specForm" onsubmit="saveSpec(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Название <span class="required">*</span></label>
+                    <input type="text" id="specName" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Продукция <span class="required">*</span></label>
+                    <select id="specProductId" class="form-input" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Материал</label>
+                    <select id="specMaterialId" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Количество материала</label>
+                    <input type="number" id="specQuantity" class="form-input" step="0.0001" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Операция</label>
+                    <select id="specOperationId" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Время операции (ч)</label>
+                    <input type="number" id="specOperationTime" class="form-input" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('specModal')">Отмена</button>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
